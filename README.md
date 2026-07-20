@@ -1,59 +1,55 @@
 # Rivio · Plataforma de Implantação
 
-Aplicação web para mapear a operação de um hospital (AS IS), desenhar o estado futuro (To Be),
-analisar a cobertura do produto Rivio (Units of Work da base RCM 2.0), identificar gaps e
-gerir as regras de auditoria e os testes.
+App web para mapear a operação de um hospital (AS IS), desenhar o To Be, analisar a cobertura
+do produto Rivio (Units of Work da base RCM 2.0), identificar gaps e gerir regras de auditoria e testes.
 
 Stack: **React + TypeScript + Vite**. Dados em tempo real no **Firebase Realtime Database**.
-Login via **Google**, restrito a contas `@rivio.com.br`.
+Login **Google** restrito a contas `@rivio.com.br`.
 
-## Rodando localmente
-
+## Rodar localmente
 ```bash
 npm install
-npm run dev
+npm run dev      # http://localhost:5173
 ```
 
-Abre em `http://localhost:5173`.
+## Publicar no GitHub Pages (sem build no servidor)
+A pasta **`docs/`** já contém a versão compilada (pronta para servir).
 
-## Build de produção
+1. Suba todos os arquivos deste projeto no repositório.
+2. No GitHub: **Settings → Pages → Build and deployment**.
+3. Em **Source**, escolha **Deploy from a branch**.
+4. Em **Branch**, selecione `main` e a pasta **`/docs`**, e clique **Save**.
+5. Aguarde ~1 min e abra a URL do Pages.
 
+> Sempre que mudar o código, rode `npm run build` de novo e copie o conteúdo de `dist/`
+> para `docs/` antes de subir (ou use o workflow do GitHub Actions — ver abaixo).
+
+## Regenerar o build de produção
 ```bash
-npm run build      # gera dist/
-npm run preview    # serve o build localmente
+npm run build            # gera dist/
+# copie dist/ para docs/ (Windows PowerShell):
+#   Remove-Item docs -Recurse -Force; Copy-Item dist docs -Recurse
 ```
-
-## Deploy
-
-O `base` do Vite está como `"./"` (caminhos relativos), então funciona em qualquer host estático:
-
-- **Vercel / Netlify**: importe o repositório; build command `npm run build`, output `dist`.
-- **GitHub Pages**: rode `npm run build` e publique a pasta `dist/` (ou use a Action `actions/deploy-pages`).
 
 ## Firebase
+Config em `src/firebase.ts` (client-side; a segurança vem das regras do Realtime Database e da
+restrição de domínio no login). Os dados vivem no nó `frame`. Na 1ª execução, se o nó estiver
+vazio, o app popula as 110 Units of Work da base RCM 2.0. As demais coleções começam vazias.
 
-A configuração fica em `src/firebase.ts`. O objeto `firebaseConfig` é público por natureza
-(client-side) — a segurança é garantida pelas **regras** do Realtime Database e pela
-restrição de domínio no login. Os dados vivem sob o nó `frame` do banco.
-
-Na primeira execução, se o nó `frame` estiver vazio, o app popula automaticamente as
-**110 Units of Work** da base RCM 2.0. As demais coleções começam vazias e são preenchidas
-pelo uso.
+Lembre de adicionar o domínio do Pages em **Firebase → Authentication → Settings → Authorized domains**.
 
 ## Estrutura
-
 ```
+docs/                versão compilada (servida pelo GitHub Pages)
 src/
-  main.tsx            Ponto de entrada
-  App.tsx             Shell, navegação, busca, gate de login
-  firebase.ts         Config do Firebase (RTDB + Auth Google)
-  auth.tsx            Contexto de autenticação (@rivio.com.br)
-  store.tsx           Estado global + sincronização com o RTDB
-  types.ts            Tipos do modelo de dados
-  styles.css          Estilos (tema claro)
-  data/seed.ts        Base embutida (Units of Work RCM 2.0)
-  lib/                constants.ts (listas/cores) · derive.ts (To Be, Gaps, helpers)
-  ui.tsx              Componentes compartilhados (Badge, Modal, Tabela, MultiSelect…)
-  views/              Uma tela por arquivo (Dashboards, Flow, ToBe, ChangeMgmt,
-                      UoW, Regras, Gaps, Testes, Coverage, Cadastros)
+  App.tsx            shell, navegação, busca, gate de login
+  firebase.ts        Firebase (RTDB + Auth Google)
+  auth.tsx           contexto de autenticação (@rivio.com.br)
+  store.tsx          estado global + sync com o RTDB
+  types.ts           tipos do modelo
+  styles.css         estilos
+  data/seed.ts       base embutida (Units of Work RCM 2.0)
+  lib/               constants.ts · derive.ts (To Be, Gaps, helpers)
+  ui.tsx             componentes compartilhados
+  views/             uma tela por arquivo
 ```
