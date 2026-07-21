@@ -25,6 +25,7 @@ export function FlowBuilder() {
     const procMatch = (!f.operadora || p.operadoras.includes(f.operadora)) && (!f.tipoAtendimento || p.tiposAtendimento.includes(f.tipoAtendimento));
     return anyMatch && procMatch;
   };
+  const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null);
   const onMouseDown = (e: any, node: Processo) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     setDrag({ id: node.id, offX: e.clientX - rect.left - node.x + canvasRef.current!.scrollLeft, offY: e.clientY - rect.top - node.y + canvasRef.current!.scrollTop });
@@ -36,13 +37,20 @@ export function FlowBuilder() {
       const rect = canvasRef.current!.getBoundingClientRect();
       const x = Math.max(0, e.clientX - rect.left - drag.offX + canvasRef.current!.scrollLeft);
       const y = Math.max(0, e.clientY - rect.top - drag.offY + canvasRef.current!.scrollTop);
-      upd((d: DB) => { const n = d.processos.find((p) => p.id === drag.id); if (n) { n.x = x; n.y = y; } });
+      setDragPos({ id: drag.id, x, y });
     };
-    const up = () => setDrag(null);
+    const up = () => {
+      setDragPos((pos) => {
+        if (pos) upd((d: DB) => { const n = d.processos.find((p) => p.id === pos.id); if (n) { n.x = pos.x; n.y = pos.y; } });
+        return null;
+      });
+      setDrag(null);
+    };
     window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
   }, [drag]);
-  const nodeCenter = (p: Processo) => ({ x: p.x + 95, y: p.y + 34 });
+  const posOf = (p: Processo) => (dragPos && dragPos.id === p.id ? dragPos : p);
+  const nodeCenter = (p: Processo) => { const q = posOf(p); return { x: q.x + 95, y: q.y + 34 }; };
   const drawerNode = db.processos.find((p) => p.id === drawerId);
 
   const addNode = (tipo: "processo" | "decisao") => {
@@ -88,8 +96,8 @@ export function FlowBuilder() {
             const s = nodeCenter(a), t = nodeCenter(b); const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
             if (edgeEdit && edgeEdit.id === c.id) return <input key={c.id} className="edge-label-input" autoFocus value={edgeEdit.value} placeholder="condição…" style={{ left: mx, top: my }} onChange={(e) => setEdgeEdit({ ...edgeEdit, value: e.target.value })} onBlur={saveEdge} onKeyDown={(e) => { if (e.key === "Enter") saveEdge(); if (e.key === "Escape") setEdgeEdit(null); }} onMouseDown={(e) => e.stopPropagation()} />;
             return <div key={c.id} className={"edge-label" + (c.label ? "" : " empty")} style={{ left: mx, top: my }} title="Escrever condição na linha" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEdgeEdit({ id: c.id, value: c.label || "" }); }}>{c.label || "＋"}</div>; })}
-          {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p);
-            return (<div key={p.id} className={"node " + (p.tipo === "decisao" ? "decision " : "") + (selected === p.id ? "selected" : "")} style={{ left: p.x, top: p.y, opacity: dim ? 0.28 : 1 }} onMouseDown={(e) => e.stopPropagation()}>
+          {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
+            return (<div key={p.id} className={"node " + (p.tipo === "decisao" ? "decision " : "") + (selected === p.id ? "selected" : "")} style={{ left: pos.x, top: pos.y, opacity: dim ? 0.28 : 1 }} onMouseDown={(e) => e.stopPropagation()}>
               <span className="node-badge">{acts.length}</span>
               <button className="node-plus" title="Adicionar caixa conectada" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addChild(p); }}>+</button>
               <div className="node-head" onMouseDown={(e) => onMouseDown(e, p)} onDoubleClick={() => setDrawerId(p.id)}>
