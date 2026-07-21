@@ -51,11 +51,30 @@ export function FlowBuilder() {
   }, [drag]);
   const posOf = (p: Processo) => (dragPos && dragPos.id === p.id ? dragPos : p);
   const NODE_W = 190, NODE_H = 64; // must match .node min-width/min-height in styles.css
+  const [lineStyle, setLineStyle] = useState<"curva" | "reta" | "orto">("curva");
   // Ancora no lado direito (saída) ou esquerdo (entrada) da caixa, no estilo Figma,
   // em vez de mirar no centro — assim a linha sempre gruda na borda certa.
   const nodeAnchor = (p: Processo, side: "left" | "right") => {
     const q = posOf(p);
     return { x: side === "right" ? q.x + NODE_W : q.x, y: q.y + NODE_H / 2 };
+  };
+  // Calcula as âncoras (lado de saída/entrada) e o path SVG de acordo com o estilo escolhido.
+  const edgeGeometry = (a: Processo, b: Processo) => {
+    const forward = posOf(b).x >= posOf(a).x;
+    const s = nodeAnchor(a, forward ? "right" : "left");
+    const t = nodeAnchor(b, forward ? "left" : "right");
+    const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+    let d = "";
+    if (lineStyle === "reta") {
+      d = `M ${s.x} ${s.y} L ${t.x} ${t.y}`;
+    } else if (lineStyle === "orto") {
+      const midX = s.x + (t.x - s.x) / 2;
+      d = `M ${s.x} ${s.y} L ${midX} ${s.y} L ${midX} ${t.y} L ${t.x} ${t.y}`;
+    } else {
+      const dx = Math.max(40, Math.abs(t.x - s.x) * 0.5) * (forward ? 1 : -1);
+      d = `M ${s.x} ${s.y} C ${s.x + dx} ${s.y}, ${t.x - dx} ${t.y}, ${t.x} ${t.y}`;
+    }
+    return { d, mx, my };
   };
   const drawerNode = db.processos.find((p) => p.id === drawerId);
 
@@ -88,22 +107,25 @@ export function FlowBuilder() {
         <select className="select-sm" value={f.tipoConta} onChange={(e) => setFilters({ ...f, tipoConta: e.target.value })}><option value="">Tipo de conta</option>{db.tiposConta.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         <select className="select-sm" value={f.itemConta} onChange={(e) => setFilters({ ...f, itemConta: e.target.value })}><option value="">Item da conta</option>{db.itensConta.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         {activeFilter && <button className="btn ghost sm" onClick={() => setFilters({ operadora: "", tipoAtendimento: "", tipoConta: "", itemConta: "" })}>Limpar</button>}
+        <div style={{ width: 1, height: 22, background: "var(--border)" }} />
+        <span className="dim" style={{ fontSize: 11 }}>Linha:</span>
+        <div className="row" style={{ gap: 4 }}>
+          <button className={"btn sm" + (lineStyle === "curva" ? " primary" : "")} onClick={() => setLineStyle("curva")}>Curva</button>
+          <button className={"btn sm" + (lineStyle === "reta" ? " primary" : "")} onClick={() => setLineStyle("reta")}>Reta</button>
+          <button className={"btn sm" + (lineStyle === "orto" ? " primary" : "")} onClick={() => setLineStyle("orto")}>Ortogonal</button>
+        </div>
         <span className="dim" style={{ marginLeft: "auto", fontSize: 11 }}>Arraste para mover • <b>+</b> cria caixa conectada • <b>duplo clique</b> abre ações</span>
       </div>
       <div className="flow-canvas" ref={canvasRef} onMouseDown={(e: any) => { if (e.target === e.currentTarget || e.target.classList.contains("flow-inner")) setSelected(null); }}>
         <div className="flow-inner" style={{ width: maxX, height: maxY }}>
           <svg className="edges" width={maxX} height={maxY}>
-            <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b6bcc6" /></marker></defs>
+            <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#9aa1ad" /></marker></defs>
             {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
-              const forward = posOf(b).x >= posOf(a).x;
-              const s = nodeAnchor(a, forward ? "right" : "left"), t = nodeAnchor(b, forward ? "left" : "right");
-              const dx = Math.max(40, Math.abs(t.x - s.x) * 0.5) * (forward ? 1 : -1);
-              return <path key={c.id} className="edge-path" d={`M ${s.x} ${s.y} C ${s.x + dx} ${s.y}, ${t.x - dx} ${t.y}, ${t.x} ${t.y}`} />; })}
+              const { d } = edgeGeometry(a, b);
+              return <path key={c.id} className="edge-path" d={d} />; })}
           </svg>
           {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
-            const forward = posOf(b).x >= posOf(a).x;
-            const s = nodeAnchor(a, forward ? "right" : "left"), t = nodeAnchor(b, forward ? "left" : "right");
-            const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+            const { mx, my } = edgeGeometry(a, b);
             if (edgeEdit && edgeEdit.id === c.id) return <input key={c.id} className="edge-label-input" autoFocus value={edgeEdit.value} placeholder="condição…" style={{ left: mx, top: my }} onChange={(e) => setEdgeEdit({ ...edgeEdit, value: e.target.value })} onBlur={saveEdge} onKeyDown={(e) => { if (e.key === "Enter") saveEdge(); if (e.key === "Escape") setEdgeEdit(null); }} onMouseDown={(e) => e.stopPropagation()} />;
             return <div key={c.id} className={"edge-label" + (c.label ? "" : " empty")} style={{ left: mx, top: my }} title="Escrever condição na linha" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEdgeEdit({ id: c.id, value: c.label || "" }); }}>{c.label || "＋"}</div>; })}
           {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
