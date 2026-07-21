@@ -50,7 +50,13 @@ export function FlowBuilder() {
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
   }, [drag]);
   const posOf = (p: Processo) => (dragPos && dragPos.id === p.id ? dragPos : p);
-  const nodeCenter = (p: Processo) => { const q = posOf(p); return { x: q.x + 95, y: q.y + 34 }; };
+  const NODE_W = 190, NODE_H = 64; // must match .node min-width/min-height in styles.css
+  // Ancora no lado direito (saída) ou esquerdo (entrada) da caixa, no estilo Figma,
+  // em vez de mirar no centro — assim a linha sempre gruda na borda certa.
+  const nodeAnchor = (p: Processo, side: "left" | "right") => {
+    const q = posOf(p);
+    return { x: side === "right" ? q.x + NODE_W : q.x, y: q.y + NODE_H / 2 };
+  };
   const drawerNode = db.processos.find((p) => p.id === drawerId);
 
   const addNode = (tipo: "processo" | "decisao") => {
@@ -89,11 +95,15 @@ export function FlowBuilder() {
           <svg className="edges" width={maxX} height={maxY}>
             <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#b6bcc6" /></marker></defs>
             {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
-              const s = nodeCenter(a), t = nodeCenter(b); const dx = Math.max(40, Math.abs(t.x - s.x) * 0.5);
+              const forward = posOf(b).x >= posOf(a).x;
+              const s = nodeAnchor(a, forward ? "right" : "left"), t = nodeAnchor(b, forward ? "left" : "right");
+              const dx = Math.max(40, Math.abs(t.x - s.x) * 0.5) * (forward ? 1 : -1);
               return <path key={c.id} className="edge-path" d={`M ${s.x} ${s.y} C ${s.x + dx} ${s.y}, ${t.x - dx} ${t.y}, ${t.x} ${t.y}`} />; })}
           </svg>
           {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
-            const s = nodeCenter(a), t = nodeCenter(b); const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+            const forward = posOf(b).x >= posOf(a).x;
+            const s = nodeAnchor(a, forward ? "right" : "left"), t = nodeAnchor(b, forward ? "left" : "right");
+            const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
             if (edgeEdit && edgeEdit.id === c.id) return <input key={c.id} className="edge-label-input" autoFocus value={edgeEdit.value} placeholder="condição…" style={{ left: mx, top: my }} onChange={(e) => setEdgeEdit({ ...edgeEdit, value: e.target.value })} onBlur={saveEdge} onKeyDown={(e) => { if (e.key === "Enter") saveEdge(); if (e.key === "Escape") setEdgeEdit(null); }} onMouseDown={(e) => e.stopPropagation()} />;
             return <div key={c.id} className={"edge-label" + (c.label ? "" : " empty")} style={{ left: mx, top: my }} title="Escrever condição na linha" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEdgeEdit({ id: c.id, value: c.label || "" }); }}>{c.label || "＋"}</div>; })}
           {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
