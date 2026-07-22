@@ -20,7 +20,7 @@ export function deriveGaps(db: DB) {
   const auto: any[] = [];
   rows.forEach((r) => {
     if (r.isGap)
-      auto.push({ id: "auto_" + r.id, tipo: "Sem Unit of Work", origem: "To Be", processo: r.processo, acao: r.id, operadora: r.operadoras[0] || "", prioridade: "Alta", responsavel: "", status: "Aberto", obs: "Ação será executada pelo produto mas nenhuma UoW a cobre.", auto: true });
+      auto.push({ id: "auto_" + r.id, tipo: "Sem Unit of Work", origem: "To Be", processo: r.processo, acao: r.id, operadora: (r.operadoras || [])[0] || "", prioridade: "Alta", responsavel: "", status: "Aberto", obs: "Ação será executada pelo produto mas nenhuma UoW a cobre.", auto: true });
   });
   db.problemas.forEach((pb) => {
     const hasRule = db.regras.some((r) => (r.problemas || []).includes(pb.id));

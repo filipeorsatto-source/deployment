@@ -7,6 +7,14 @@ import type { DB } from "./types";
 const DB_PATH = "frame";
 
 const toArr = (v: any) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
+// Registros antigos/incompletos no Firebase podem não ter certos campos de array
+// (ex.: "operadoras" ausente numa ação) — isso derrubava o app inteiro (tela branca)
+// em qualquer lugar que fizesse .forEach ou [0] nesses campos. Preenchemos os padrões aqui,
+// uma única vez, pra todo o resto do app poder confiar que esses campos sempre existem.
+const sanitizeAcao = (a: any) => ({ operadoras: [], tiposAtendimento: [], itemConta: "", tipoConta: "", ...a });
+const sanitizeProcesso = (p: any) => ({ operadoras: [], tiposAtendimento: [], ...p });
+const sanitizeProblema = (pb: any) => ({ operadoras: [], itensConta: [], tiposAtendimento: [], ...pb });
+const sanitizeRegra = (r: any) => ({ itensConta: [], operadoras: [], tiposAtendimento: [], problemas: [], ...r });
 function normalize(val: any): DB {
   return {
     operadoras: toArr(val?.operadoras), tiposAtendimento: toArr(val?.tiposAtendimento),
@@ -14,9 +22,9 @@ function normalize(val: any): DB {
     setores: toArr(val?.setores), funcionarios: toArr(val?.funcionarios),
     sistemas: toArr(val?.sistemas), plataformas: toArr(val?.plataformas),
     produtosRivio: toArr(val?.produtosRivio), unitsOfWork: toArr(val?.unitsOfWork),
-    processos: toArr(val?.processos), conexoes: toArr(val?.conexoes), acoes: toArr(val?.acoes),
+    processos: toArr(val?.processos).map(sanitizeProcesso), conexoes: toArr(val?.conexoes), acoes: toArr(val?.acoes).map(sanitizeAcao),
     tobe: val?.tobe && typeof val.tobe === "object" && !Array.isArray(val.tobe) ? val.tobe : {},
-    problemas: toArr(val?.problemas), regras: toArr(val?.regras),
+    problemas: toArr(val?.problemas).map(sanitizeProblema), regras: toArr(val?.regras).map(sanitizeRegra),
     gapsManuais: toArr(val?.gapsManuais), testes: toArr(val?.testes),
   };
 }
