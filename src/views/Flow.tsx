@@ -76,6 +76,34 @@ export function FlowBuilder() {
     }
     return { d, mx, my };
   };
+  const canvasPoint = (e: any) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - rect.left + canvasRef.current!.scrollLeft, y: e.clientY - rect.top + canvasRef.current!.scrollTop };
+  };
+  const withinNodeBox = (p: Processo, pt: { x: number; y: number }) => {
+    const q = posOf(p);
+    return pt.x >= q.x - 6 && pt.x <= q.x + NODE_W + 6 && pt.y >= q.y - 6 && pt.y <= q.y + 110; // 110 = buffer for taller boxes with chips
+  };
+  // Conector estilo Figma: arraste a alcinha da caixa até outra caixa para linká-las livremente,
+  // sem precisar criar uma caixa nova (diferente do botão "+").
+  const [linkFrom, setLinkFrom] = useState<string | null>(null);
+  const [linkPos, setLinkPos] = useState<{ x: number; y: number } | null>(null);
+  const startLink = (e: any, node: Processo) => { setLinkFrom(node.id); setLinkPos(canvasPoint(e)); };
+  useEffect(() => {
+    if (!linkFrom) return;
+    const move = (e: any) => setLinkPos(canvasPoint(e));
+    const up = (e: any) => {
+      const pt = canvasPoint(e);
+      const target = db.processos.find((p) => p.id !== linkFrom && withinNodeBox(p, pt));
+      if (target) {
+        const exists = db.conexoes.some((c) => (c.from === linkFrom && c.to === target.id) || (c.from === target.id && c.to === linkFrom));
+        if (!exists) upd((d: DB) => { d.conexoes.push({ id: uid("e"), from: linkFrom, to: target.id, label: "" }); });
+      }
+      setLinkFrom(null); setLinkPos(null);
+    };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  }, [linkFrom]);
   const drawerNode = db.processos.find((p) => p.id === drawerId);
 
   const addNode = (tipo: "processo" | "decisao") => {
@@ -114,7 +142,7 @@ export function FlowBuilder() {
           <button className={"btn sm" + (lineStyle === "reta" ? " primary" : "")} onClick={() => setLineStyle("reta")}>Reta</button>
           <button className={"btn sm" + (lineStyle === "orto" ? " primary" : "")} onClick={() => setLineStyle("orto")}>Ortogonal</button>
         </div>
-        <span className="dim" style={{ marginLeft: "auto", fontSize: 11 }}>Arraste para mover • <b>+</b> cria caixa conectada • <b>duplo clique</b> abre ações</span>
+        <span className="dim" style={{ marginLeft: "auto", fontSize: 11 }}>Arraste para mover • bolinha azul na borda conecta a outra caixa • <b>+</b> cria caixa já conectada • <b>duplo clique</b> abre ações</span>
       </div>
       <div className="flow-canvas" ref={canvasRef} onMouseDown={(e: any) => { if (e.target === e.currentTarget || e.target.classList.contains("flow-inner")) setSelected(null); }}>
         <div className="flow-inner" style={{ width: maxX, height: maxY }}>
@@ -123,15 +151,19 @@ export function FlowBuilder() {
             {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
               const { d } = edgeGeometry(a, b);
               return <path key={c.id} className="edge-path" d={d} />; })}
+            {linkFrom && linkPos && (() => { const a = db.processos.find((p) => p.id === linkFrom); if (!a) return null; const s = nodeAnchor(a, "right");
+              return <path className="edge-path linking" d={`M ${s.x} ${s.y} L ${linkPos.x} ${linkPos.y}`} />; })()}
           </svg>
           {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
             const { mx, my } = edgeGeometry(a, b);
             if (edgeEdit && edgeEdit.id === c.id) return <input key={c.id} className="edge-label-input" autoFocus value={edgeEdit.value} placeholder="condição…" style={{ left: mx, top: my }} onChange={(e) => setEdgeEdit({ ...edgeEdit, value: e.target.value })} onBlur={saveEdge} onKeyDown={(e) => { if (e.key === "Enter") saveEdge(); if (e.key === "Escape") setEdgeEdit(null); }} onMouseDown={(e) => e.stopPropagation()} />;
             return <div key={c.id} className={"edge-label" + (c.label ? "" : " empty")} style={{ left: mx, top: my }} title="Escrever condição na linha" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEdgeEdit({ id: c.id, value: c.label || "" }); }}>{c.label || "＋"}</div>; })}
           {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
-            return (<div key={p.id} className={"node " + (p.tipo === "decisao" ? "decision " : "") + (selected === p.id ? "selected" : "")} style={{ left: pos.x, top: pos.y, opacity: dim ? 0.28 : 1 }} onMouseDown={(e) => e.stopPropagation()}>
+            const isLinkTarget = !!(linkFrom && linkFrom !== p.id && linkPos && withinNodeBox(p, linkPos));
+            return (<div key={p.id} className={"node " + (p.tipo === "decisao" ? "decision " : "") + (selected === p.id ? "selected " : "") + (isLinkTarget ? "link-target" : "")} style={{ left: pos.x, top: pos.y, opacity: dim ? 0.28 : 1 }} onMouseDown={(e) => e.stopPropagation()}>
               <span className="node-badge">{acts.length}</span>
               <button className="node-plus" title="Adicionar caixa conectada" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); addChild(p); }}>+</button>
+              <div className="node-link-handle" title="Arraste até outra caixa para conectar" onMouseDown={(e) => { e.stopPropagation(); startLink(e, p); }} />
               <div className="node-head" onMouseDown={(e) => onMouseDown(e, p)} onDoubleClick={() => setDrawerId(p.id)}>
                 <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, background: p.tipo === "decisao" ? "#f6d9a8" : "var(--brand-soft)", color: p.tipo === "decisao" ? "#b45309" : "var(--brand)" }}>{p.tipo === "decisao" ? "◆" : "▭"}</div>
                 <div className="node-title">{p.nome}</div>
@@ -162,7 +194,7 @@ export function FlowBuilder() {
               <button className="btn primary sm" onClick={() => setEditAction({ processo: drawerNode.id })}><Ic d={icons.plus} size={13} />Ação</button></div>
             {actionsByProc(drawerNode.id).map((a) => (<div className="act-item" key={a.id}>
               <div className="between"><div style={{ fontWeight: 650 }}>{a.nome}</div>
-                <div className="row" style={{ gap: 4 }}><button className="btn ghost sm" onClick={() => setEditAction(a)}>Editar</button><button className="btn ghost sm danger" onClick={() => upd((d: DB) => { d.acoes = d.acoes.filter((x) => x.id !== a.id); delete d.tobe[a.id]; })}>×</button></div></div>
+                <div className="row" style={{ gap: 4 }}><button className="btn ghost sm" onClick={() => setEditAction(a)}>Editar</button><button className="btn ghost sm danger" onClick={() => { if (confirm("Excluir esta ação?")) upd((d: DB) => { d.acoes = d.acoes.filter((x) => x.id !== a.id); delete d.tobe[a.id]; }); }}>×</button></div></div>
               <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>{a.descricao}</div>
               <div className="chips">{a.itemConta && <span className="chip b-purple">{nameById(db.itensConta, a.itemConta)}</span>}{a.tipoConta && <span className="chip">{nameById(db.tiposConta, a.tipoConta)}</span>}<span className="chip">{nameById(db.sistemas, a.sistema)}</span><span className="chip">{nameById(db.funcionarios, a.responsavel)}</span></div>
             </div>))}
