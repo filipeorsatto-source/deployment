@@ -14,15 +14,20 @@ import { Regras } from "./views/Regras";
 import { Gaps } from "./views/Gaps";
 import { Testes } from "./views/Testes";
 import { Cadastros } from "./views/Cadastros";
+import { QuestionariosASIS } from "./views/QuestionariosASIS";
+import { MapeamentoAI } from "./views/MapeamentoAI";
 
 const NAV = [
   { group: "Dashboards", items: [{ k: "dashProc", label: "Dashboard Processo", icon: "dash" }, { k: "dashReg", label: "Dashboard Regras", icon: "dashR" }] },
-  { group: "Diagnóstico", items: [{ k: "flow", label: "AS IS · Fluxo", icon: "flow" }, { k: "tobe", label: "To Be", icon: "tobe" }, { k: "change", label: "Change Management", icon: "change" }, { k: "explorer", label: "Coverage Explorer", icon: "explorer" }] },
+  { group: "Diagnóstico", items: [{ k: "qasis", label: "Questionários AS IS", icon: "qasis" }, { k: "mapAI", label: "Mapeamento AS IS · AI RIVIO", icon: "qasis" }, { k: "flow", label: "AS IS · Fluxo", icon: "flow" }, { k: "tobe", label: "To Be", icon: "tobe" }, { k: "change", label: "Change Management", icon: "change" }, { k: "explorer", label: "Coverage Explorer", icon: "explorer" }] },
   { group: "Produto & Regras", items: [{ k: "uow", label: "Units of Work", icon: "uow" }, { k: "regras", label: "Regras", icon: "rules" }, { k: "gaps", label: "Gaps", icon: "gaps" }, { k: "testes", label: "Testes", icon: "tests" }] },
   { group: "Base", items: [{ k: "cadastros", label: "Cadastros", icon: "cad" }] },
 ];
 const TITLES: Record<string, [string, string]> = {
-  dashProc: ["Dashboard", "Processo"], dashReg: ["Dashboard", "Regras"], flow: ["AS IS", "Mapeamento do processo atual"],
+  dashProc: ["Dashboard", "Processo"], dashReg: ["Dashboard", "Regras"],
+  qasis: ["Questionários AS IS", "Descoberta por setor e operadora"],
+  mapAI: ["Mapeamento AS IS", "AI RIVIO · gerado a partir do questionário"],
+  flow: ["AS IS", "Mapeamento do processo atual"],
   tobe: ["To Be", "Estado futuro por ação"], change: ["Change Management", "Plano de transição"], explorer: ["Coverage Explorer", "Inteligência operacional"],
   uow: ["Units of Work", "Base RCM 2.0"], regras: ["Regras", "Auditoria e problemas"], gaps: ["Gaps", "Lacunas de cobertura"],
   testes: ["Testes", "Validação de regras e features"], cadastros: ["Cadastros", "Entidades base"],
@@ -36,6 +41,7 @@ function globalSearch(db: DB, q: string) {
   db.unitsOfWork.forEach((u) => { if (u.nome.toLowerCase().includes(t)) push("Unit of Work", u.nome, "uow"); });
   db.regras.forEach((r) => { if (r.nome.toLowerCase().includes(t)) push("Regra", r.nome, "regras"); });
   db.problemas.forEach((p) => { if (p.nome.toLowerCase().includes(t)) push("Problema", p.nome, "regras"); });
+  db.perguntas.forEach((p) => { if (p.questionamento.toLowerCase().includes(t)) push("Questionamento", p.questionamento, "qasis"); });
   db.itensConta.forEach((i) => { if (i.nome.toLowerCase().includes(t)) push("Item da conta", i.nome, "explorer"); });
   db.operadoras.forEach((o) => { if (o.nome.toLowerCase().includes(t)) push("Operadora", o.nome, "cadastros"); });
   return out.slice(0, 12);
@@ -44,11 +50,11 @@ function globalSearch(db: DB, q: string) {
 function Shell() {
   const { db } = useStore();
   const { user, logout } = useAuth();
-  const [view, setView] = useState("uow");
+  const [view, setView] = useState("qasis");
   const [q, setQ] = useState(""); const [showSr, setShowSr] = useState(false);
   const results = useMemo(() => globalSearch(db, q), [db, q]);
   const go = (v: string) => { setView(v); setQ(""); setShowSr(false); };
-  const counts: Record<string, number> = { flow: db.processos.length, tobe: db.acoes.length, uow: db.unitsOfWork.length, regras: db.regras.length, gaps: deriveGaps(db).length, testes: db.testes.length };
+  const counts: Record<string, number> = { qasis: db.perguntas.length, flow: db.processos.length, tobe: db.acoes.length, uow: db.unitsOfWork.length, regras: db.regras.length, gaps: deriveGaps(db).length, testes: db.testes.length };
   return (
     <div className="app">
       <aside className="sidebar">
@@ -70,6 +76,8 @@ function Shell() {
         <div className={"content" + (view === "flow" ? " no-pad" : "")}>
           {view === "dashProc" && <DashProcesso go={go} />}
           {view === "dashReg" && <DashRegras />}
+          {view === "qasis" && <QuestionariosASIS />}
+          {view === "mapAI" && <MapeamentoAI go={go} />}
           {view === "flow" && <FlowBuilder />}
           {view === "tobe" && <ToBe />}
           {view === "change" && <ChangeMgmt />}

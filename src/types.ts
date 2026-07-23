@@ -39,6 +39,19 @@ export interface Teste {
   ambiente: string; dono: string; descricao: string; nota: number;
 }
 
+// --- Questionários AS IS ---
+// Banco de perguntas (compartilhado, autorado por setor). operadorasAplicaveis vazio = vale para todas.
+export interface Pergunta {
+  id: string; setor: string; questionamento: string; obs: string;
+  keywords: string[]; criticidade: string; etapaRCM: string;
+  operadorasAplicaveis: string[]; tipoAcao: string; acao: string;
+}
+// Resposta por operadora. Guardada em DB.respostas com a chave `${operadora}::${perguntaId}`.
+export interface RespostaEntry {
+  resposta: string; evidencia: string; tipoAcao: string; acao: string;
+  fonte: string; noVinculado: string; status: string; obs: string;
+}
+
 export interface DB {
   operadoras: Named[];
   tiposAtendimento: Named[];
@@ -58,6 +71,8 @@ export interface DB {
   regras: Regra[];
   gapsManuais: GapManual[];
   testes: Teste[];
+  perguntas: Pergunta[];
+  respostas: Record<string, RespostaEntry>;
 }
 
 export type DBKey = keyof DB;

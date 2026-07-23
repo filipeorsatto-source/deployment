@@ -7,6 +7,7 @@ import type { DB } from "./types";
 const DB_PATH = "frame";
 
 const toArr = (v: any) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
+const toRec = (v: any) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 // Registros antigos/incompletos no Firebase podem não ter certos campos de array
 // (ex.: "operadoras" ausente numa ação) — isso derrubava o app inteiro (tela branca)
 // em qualquer lugar que fizesse .forEach ou [0] nesses campos. Preenchemos os padrões aqui,
@@ -23,9 +24,10 @@ function normalize(val: any): DB {
     sistemas: toArr(val?.sistemas), plataformas: toArr(val?.plataformas),
     produtosRivio: toArr(val?.produtosRivio), unitsOfWork: toArr(val?.unitsOfWork),
     processos: toArr(val?.processos).map(sanitizeProcesso), conexoes: toArr(val?.conexoes), acoes: toArr(val?.acoes).map(sanitizeAcao),
-    tobe: val?.tobe && typeof val.tobe === "object" && !Array.isArray(val.tobe) ? val.tobe : {},
+    tobe: toRec(val?.tobe),
     problemas: toArr(val?.problemas).map(sanitizeProblema), regras: toArr(val?.regras).map(sanitizeRegra),
     gapsManuais: toArr(val?.gapsManuais), testes: toArr(val?.testes),
+    perguntas: toArr(val?.perguntas), respostas: toRec(val?.respostas),
   };
 }
 
