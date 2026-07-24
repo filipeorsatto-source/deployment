@@ -12,6 +12,7 @@ export interface Processo {
   id: string; nome: string; descricao: string; tipo: "processo" | "decisao";
   x: number; y: number; tiposAtendimento: string[]; operadoras: string[];
   sistema: string; setor: string; responsavel: string;
+  pastaHospital?: string; pastaOperadora?: string;
 }
 export interface Conexao { id: string; from: string; to: string; label: string; }
 export interface Acao {
@@ -29,6 +30,7 @@ export interface Regra {
   id: string; nome: string; descricao: string; itensConta: string[];
   operadoras: string[]; tiposAtendimento: string[]; problemas: string[];
   status: string; obs: string;
+  pastaHospital?: string; pastaOperadora?: string;
 }
 export interface GapManual {
   id: string; tipo: string; origem: string; processo: string; acao: string;
@@ -37,6 +39,7 @@ export interface GapManual {
 export interface Teste {
   id: string; data: string; tipoConta: string; tipoTeste: string;
   ambiente: string; dono: string; descricao: string; nota: number;
+  pastaHospital?: string; pastaOperadora?: string;
 }
 
 // --- Questionários AS IS ---
@@ -51,6 +54,16 @@ export interface RespostaEntry {
   resposta: string; evidencia: string; tipoAcao: string; acao: string;
   fonte: string; noVinculado: string; status: string; obs: string;
 }
+
+// --- Pendências (módulo de gestão de pendências do Tasy) ---
+// operadorasAplicaveis: flag por operadora (presente = a pendência se aplica àquela operadora).
+// regras: regras de auditoria que geram a pendência (deve haver ao menos uma).
+export interface Pendencia {
+  id: string; nome: string; descricao: string;
+  operadorasAplicaveis: string[]; setor: string; responsavel: string;
+  alertaEmail: boolean; regras: string[]; status: string; obs: string;
+}
+
 
 export interface DB {
   operadoras: Named[];
@@ -73,6 +86,7 @@ export interface DB {
   testes: Teste[];
   perguntas: Pergunta[];
   respostas: Record<string, RespostaEntry>;
+  pendencias: Pendencia[];
 }
 
 export type DBKey = keyof DB;

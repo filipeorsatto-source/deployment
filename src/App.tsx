@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AuthProvider, useAuth } from "./auth";
 import { StoreProvider, useStore } from "./store";
 import { Ic, icons } from "./ui";
@@ -16,11 +16,12 @@ import { Testes } from "./views/Testes";
 import { Cadastros } from "./views/Cadastros";
 import { QuestionariosASIS } from "./views/QuestionariosASIS";
 import { MapeamentoAI } from "./views/MapeamentoAI";
+import { Pendencias } from "./views/Pendencias";
 
 const NAV = [
   { group: "Dashboards", items: [{ k: "dashProc", label: "Dashboard Processo", icon: "dash" }, { k: "dashReg", label: "Dashboard Regras", icon: "dashR" }] },
   { group: "Diagnóstico", items: [{ k: "qasis", label: "Questionários AS IS", icon: "qasis" }, { k: "mapAI", label: "Mapeamento AS IS · AI RIVIO", icon: "qasis" }, { k: "flow", label: "AS IS · Fluxo", icon: "flow" }, { k: "tobe", label: "To Be", icon: "tobe" }, { k: "change", label: "Change Management", icon: "change" }, { k: "explorer", label: "Coverage Explorer", icon: "explorer" }] },
-  { group: "Produto & Regras", items: [{ k: "uow", label: "Units of Work", icon: "uow" }, { k: "regras", label: "Regras", icon: "rules" }, { k: "gaps", label: "Gaps", icon: "gaps" }, { k: "testes", label: "Testes", icon: "tests" }] },
+  { group: "Produto & Regras", items: [{ k: "uow", label: "Units of Work", icon: "uow" }, { k: "regras", label: "Regras", icon: "rules" }, { k: "pendencias", label: "Pendências", icon: "pend" }, { k: "gaps", label: "Gaps", icon: "gaps" }, { k: "testes", label: "Testes", icon: "tests" }] },
   { group: "Base", items: [{ k: "cadastros", label: "Cadastros", icon: "cad" }] },
 ];
 const TITLES: Record<string, [string, string]> = {
@@ -29,7 +30,7 @@ const TITLES: Record<string, [string, string]> = {
   mapAI: ["Mapeamento AS IS", "AI RIVIO · gerado a partir do questionário"],
   flow: ["AS IS", "Mapeamento do processo atual"],
   tobe: ["To Be", "Estado futuro por ação"], change: ["Change Management", "Plano de transição"], explorer: ["Coverage Explorer", "Inteligência operacional"],
-  uow: ["Units of Work", "Base RCM 2.0"], regras: ["Regras", "Auditoria e problemas"], gaps: ["Gaps", "Lacunas de cobertura"],
+  uow: ["Units of Work", "Base RCM 2.0"], regras: ["Regras", "Auditoria e problemas"], pendencias: ["Pendências", "Gestão do Tasy por operadora"], gaps: ["Gaps", "Lacunas de cobertura"],
   testes: ["Testes", "Validação de regras e features"], cadastros: ["Cadastros", "Entidades base"],
 };
 
@@ -42,19 +43,44 @@ function globalSearch(db: DB, q: string) {
   db.regras.forEach((r) => { if (r.nome.toLowerCase().includes(t)) push("Regra", r.nome, "regras"); });
   db.problemas.forEach((p) => { if (p.nome.toLowerCase().includes(t)) push("Problema", p.nome, "regras"); });
   db.perguntas.forEach((p) => { if (p.questionamento.toLowerCase().includes(t)) push("Questionamento", p.questionamento, "qasis"); });
+  db.pendencias.forEach((p) => { if (p.nome.toLowerCase().includes(t)) push("Pendência", p.nome, "pendencias"); });
   db.itensConta.forEach((i) => { if (i.nome.toLowerCase().includes(t)) push("Item da conta", i.nome, "explorer"); });
   db.operadoras.forEach((o) => { if (o.nome.toLowerCase().includes(t)) push("Operadora", o.nome, "cadastros"); });
   return out.slice(0, 12);
 }
 
 function Shell() {
-  const { db } = useStore();
+  const { db, upd } = useStore();
   const { user, logout } = useAuth();
   const [view, setView] = useState("qasis");
   const [q, setQ] = useState(""); const [showSr, setShowSr] = useState(false);
+  const restoreRef = useRef<HTMLInputElement>(null);
   const results = useMemo(() => globalSearch(db, q), [db, q]);
   const go = (v: string) => { setView(v); setQ(""); setShowSr(false); };
-  const counts: Record<string, number> = { qasis: db.perguntas.length, flow: db.processos.length, tobe: db.acoes.length, uow: db.unitsOfWork.length, regras: db.regras.length, gaps: deriveGaps(db).length, testes: db.testes.length };
+  const counts: Record<string, number> = { qasis: db.perguntas.length, flow: db.processos.length, tobe: db.acoes.length, uow: db.unitsOfWork.length, regras: db.regras.length, pendencias: db.pendencias.length, gaps: deriveGaps(db).length, testes: db.testes.length };
+
+  // Backup local: baixa TODO o conteúdo atual do app (já lido via Firebase) direto do
+  // navegador, num arquivo .json — sem precisar de nenhum acesso ao Console do Firebase.
+  const baixarBackup = () => {
+    const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    a.href = url; a.download = `backup-rivio-${ts}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+  const restaurarBackup = async (file: File) => {
+    if (!confirm("Isso SUBSTITUI todos os dados atuais do app pelos dados desse arquivo de backup. Essa ação não pode ser desfeita (a não ser fazendo outro backup antes). Continuar?")) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      upd((d: DB) => { Object.keys(d).forEach((k) => delete (d as any)[k]); Object.assign(d, parsed); });
+      alert("Backup restaurado com sucesso.");
+    } catch (e: any) {
+      alert("Não consegui restaurar: arquivo inválido. " + (e?.message || ""));
+    }
+  };
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -62,7 +88,12 @@ function Shell() {
         {NAV.map((g) => (<div key={g.group}><div className="nav-group-label">{g.group}</div>
           {g.items.map((it) => (<button key={it.k} className={"nav-item " + (view === it.k ? "active" : "")} onClick={() => go(it.k)}><Ic d={icons[it.icon]} />{it.label}{counts[it.k] != null && <span className="nav-badge">{counts[it.k]}</span>}</button>))}
         </div>))}
-        <div style={{ marginTop: "auto", padding: "10px 8px", fontSize: 11 }} className="dim">{user?.email}<br /><span className="link" onClick={logout}>Sair</span></div>
+        <div style={{ marginTop: "auto", padding: "10px 8px", fontSize: 11 }} className="dim">
+          <button className="btn ghost sm" style={{ width: "100%", justifyContent: "flex-start", marginBottom: 4 }} onClick={baixarBackup}><Ic d={icons.plus} size={13} />Baixar backup</button>
+          <input ref={restoreRef} type="file" accept=".json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) restaurarBackup(f); e.target.value = ""; }} />
+          <button className="btn ghost sm" style={{ width: "100%", justifyContent: "flex-start", marginBottom: 8 }} onClick={() => restoreRef.current?.click()}>Restaurar backup</button>
+          {user?.email}<br /><span className="link" onClick={logout}>Sair</span>
+        </div>
       </aside>
       <div className="main">
         <div className="topbar">
@@ -84,6 +115,7 @@ function Shell() {
           {view === "explorer" && <CoverageExplorer />}
           {view === "uow" && <UoWView />}
           {view === "regras" && <Regras />}
+          {view === "pendencias" && <Pendencias />}
           {view === "gaps" && <Gaps />}
           {view === "testes" && <Testes />}
           {view === "cadastros" && <Cadastros />}

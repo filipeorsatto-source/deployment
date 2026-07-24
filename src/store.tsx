@@ -16,7 +16,14 @@ const sanitizeAcao = (a: any) => ({ operadoras: [], tiposAtendimento: [], itemCo
 const sanitizeProcesso = (p: any) => ({ operadoras: [], tiposAtendimento: [], ...p });
 const sanitizeProblema = (pb: any) => ({ operadoras: [], itensConta: [], tiposAtendimento: [], ...pb });
 const sanitizeRegra = (r: any) => ({ itensConta: [], operadoras: [], tiposAtendimento: [], problemas: [], ...r });
+// O Firebase Realtime Database não guarda arrays vazios (ex.: uows: []) — ele simplesmente
+// remove o campo ao salvar. Sem essa sanitização, a próxima leitura vinha sem "uows" e
+// qualquer código que fizesse t.uows.includes(...) quebrava o app inteiro (tela branca).
+const sanitizeTobeEntry = (t: any) => ({ statusFuturo: "", owner: "Hospital", uows: [], obs: "", ...t });
 function normalize(val: any): DB {
+  const tobeRaw = toRec(val?.tobe);
+  const tobe: DB["tobe"] = {};
+  Object.keys(tobeRaw).forEach((k) => { tobe[k] = sanitizeTobeEntry(tobeRaw[k]); });
   return {
     operadoras: toArr(val?.operadoras), tiposAtendimento: toArr(val?.tiposAtendimento),
     tiposConta: toArr(val?.tiposConta), itensConta: toArr(val?.itensConta),
@@ -24,10 +31,11 @@ function normalize(val: any): DB {
     sistemas: toArr(val?.sistemas), plataformas: toArr(val?.plataformas),
     produtosRivio: toArr(val?.produtosRivio), unitsOfWork: toArr(val?.unitsOfWork),
     processos: toArr(val?.processos).map(sanitizeProcesso), conexoes: toArr(val?.conexoes), acoes: toArr(val?.acoes).map(sanitizeAcao),
-    tobe: toRec(val?.tobe),
+    tobe,
     problemas: toArr(val?.problemas).map(sanitizeProblema), regras: toArr(val?.regras).map(sanitizeRegra),
     gapsManuais: toArr(val?.gapsManuais), testes: toArr(val?.testes),
     perguntas: toArr(val?.perguntas), respostas: toRec(val?.respostas),
+    pendencias: toArr(val?.pendencias),
   };
 }
 
