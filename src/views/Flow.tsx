@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
 import { uid, nameById, namesByIds } from "../lib/derive";
-import { Badge, Modal, Field, MultiSelect, Ic, icons } from "../ui";
+import { Badge, Modal, Field, MultiSelect, Ic, icons, PastaBar, pastaMatch, pastaStamp } from "../ui";
 import type { DB, Processo } from "../types";
 
 export function FlowBuilder() {
   const { db, upd } = useStore();
+  const [pastaH, setPastaH] = useState<string | null>(null);
+  const [pastaO, setPastaO] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [filters, setFilters] = useState({ operadora: "", tipoAtendimento: "", tipoConta: "", itemConta: "" });
@@ -94,7 +96,7 @@ export function FlowBuilder() {
     const move = (e: any) => setLinkPos(canvasPoint(e));
     const up = (e: any) => {
       const pt = canvasPoint(e);
-      const target = db.processos.find((p) => p.id !== linkFrom && withinNodeBox(p, pt));
+      const target = procs.find((p) => p.id !== linkFrom && withinNodeBox(p, pt));
       if (target) {
         const exists = db.conexoes.some((c) => (c.from === linkFrom && c.to === target.id) || (c.from === target.id && c.to === linkFrom));
         if (!exists) upd((d: DB) => { d.conexoes.push({ id: uid("e"), from: linkFrom, to: target.id, label: "" }); });
@@ -105,26 +107,33 @@ export function FlowBuilder() {
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
   }, [linkFrom]);
   const drawerNode = db.processos.find((p) => p.id === drawerId);
+  const procs = pastaH === null || pastaO === null ? [] : db.processos.filter((p) => pastaMatch(pastaH, pastaO, p.pastaHospital, p.pastaOperadora));
+  const procIds = new Set(procs.map((p) => p.id));
+  const conexoesInPasta = db.conexoes.filter((c) => procIds.has(c.from) && procIds.has(c.to));
 
   const addNode = (tipo: "processo" | "decisao") => {
     const sl = canvasRef.current ? canvasRef.current.scrollLeft : 0, st = canvasRef.current ? canvasRef.current.scrollTop : 0;
-    const n: Processo = { id: uid("p"), nome: tipo === "decisao" ? "Nova decisão" : "Novo processo", descricao: "", tipo, x: 120 + sl, y: 120 + st, tiposAtendimento: [], operadoras: [], sistema: "", setor: "", responsavel: "" };
+    const n: Processo = { id: uid("p"), nome: tipo === "decisao" ? "Nova decisão" : "Novo processo", descricao: "", tipo, x: 120 + sl, y: 120 + st, tiposAtendimento: [], operadoras: [], sistema: "", setor: "", responsavel: "", ...pastaStamp(pastaH!, pastaO!) };
     upd((d: DB) => { d.processos.push(n); }); setSelected(n.id); setEditNode(n);
   };
   const addChild = (parent: Processo) => {
     const childCount = db.conexoes.filter((c) => c.from === parent.id).length;
     const isDec = parent.tipo === "decisao";
-    const n: Processo = { id: uid("p"), nome: isDec ? "Novo caminho" : "Novo processo", descricao: "", tipo: "processo", x: parent.x + 250, y: parent.y + childCount * 140, tiposAtendimento: [...parent.tiposAtendimento], operadoras: [...parent.operadoras], sistema: "", setor: "", responsavel: "" };
+    const n: Processo = { id: uid("p"), nome: isDec ? "Novo caminho" : "Novo processo", descricao: "", tipo: "processo", x: parent.x + 250, y: parent.y + childCount * 140, tiposAtendimento: [...parent.tiposAtendimento], operadoras: [...parent.operadoras], sistema: "", setor: "", responsavel: "", ...pastaStamp(pastaH!, pastaO!) };
     const edgeId = uid("e");
     upd((d: DB) => { d.processos.push(n); d.conexoes.push({ id: edgeId, from: parent.id, to: n.id, label: "" }); });
     setSelected(n.id);
     if (isDec) setEdgeEdit({ id: edgeId, value: "" }); else setEditNode(n);
   };
-  const maxX = Math.max(1200, ...db.processos.map((p) => p.x)) + 600;
-  const maxY = Math.max(800, ...db.processos.map((p) => p.y)) + 400;
+  const maxX = Math.max(1200, ...procs.map((p) => p.x)) + 600;
+  const maxY = Math.max(800, ...procs.map((p) => p.y)) + 400;
 
   return (
     <>
+      <div style={{ padding: pastaH !== null && pastaO !== null ? "14px 16px 0" : "14px 16px" }}>
+        <PastaBar items={db.processos} hospital={pastaH} operadora={pastaO} onChange={(h, o) => { setPastaH(h); setPastaO(o); }} />
+      </div>
+      {pastaH === null || pastaO === null ? null : (<>
       <div className="flow-toolbar">
         <button className="btn primary sm" onClick={() => addNode("processo")}><Ic d={icons.plus} size={13} />Processo</button>
         <button className="btn sm" onClick={() => addNode("decisao")}><Ic d={icons.plus} size={13} />Decisão</button>
@@ -148,17 +157,17 @@ export function FlowBuilder() {
         <div className="flow-inner" style={{ width: maxX, height: maxY }}>
           <svg className="edges" width={maxX} height={maxY}>
             <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#9aa1ad" /></marker></defs>
-            {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
+            {conexoesInPasta.map((c) => { const a = procs.find((p) => p.id === c.from), b = procs.find((p) => p.id === c.to); if (!a || !b) return null;
               const { d } = edgeGeometry(a, b);
               return <path key={c.id} className="edge-path" d={d} />; })}
-            {linkFrom && linkPos && (() => { const a = db.processos.find((p) => p.id === linkFrom); if (!a) return null; const s = nodeAnchor(a, "right");
+            {linkFrom && linkPos && (() => { const a = procs.find((p) => p.id === linkFrom); if (!a) return null; const s = nodeAnchor(a, "right");
               return <path className="edge-path linking" d={`M ${s.x} ${s.y} L ${linkPos.x} ${linkPos.y}`} />; })()}
           </svg>
-          {db.conexoes.map((c) => { const a = db.processos.find((p) => p.id === c.from), b = db.processos.find((p) => p.id === c.to); if (!a || !b) return null;
+          {conexoesInPasta.map((c) => { const a = procs.find((p) => p.id === c.from), b = procs.find((p) => p.id === c.to); if (!a || !b) return null;
             const { mx, my } = edgeGeometry(a, b);
             if (edgeEdit && edgeEdit.id === c.id) return <input key={c.id} className="edge-label-input" autoFocus value={edgeEdit.value} placeholder="condição…" style={{ left: mx, top: my }} onChange={(e) => setEdgeEdit({ ...edgeEdit, value: e.target.value })} onBlur={saveEdge} onKeyDown={(e) => { if (e.key === "Enter") saveEdge(); if (e.key === "Escape") setEdgeEdit(null); }} onMouseDown={(e) => e.stopPropagation()} />;
             return <div key={c.id} className={"edge-label" + (c.label ? "" : " empty")} style={{ left: mx, top: my }} title="Escrever condição na linha" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setEdgeEdit({ id: c.id, value: c.label || "" }); }}>{c.label || "＋"}</div>; })}
-          {db.processos.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
+          {procs.map((p) => { const acts = actionsByProc(p.id); const dim = activeFilter && !nodeMatches(p); const pos = posOf(p);
             const isLinkTarget = !!(linkFrom && linkFrom !== p.id && linkPos && withinNodeBox(p, linkPos));
             return (<div key={p.id} className={"node " + (p.tipo === "decisao" ? "decision " : "") + (selected === p.id ? "selected " : "") + (isLinkTarget ? "link-target" : "")} style={{ left: pos.x, top: pos.y, opacity: dim ? 0.28 : 1 }} onMouseDown={(e) => e.stopPropagation()}>
               <span className="node-badge">{acts.length}</span>
@@ -170,9 +179,10 @@ export function FlowBuilder() {
               </div>
               <div className="node-meta">{p.setor && <span className="chip">{nameById(db.setores, p.setor)}</span>}{p.sistema && <span className="chip">{nameById(db.sistemas, p.sistema)}</span>}</div>
             </div>); })}
-          {!db.processos.length && <div style={{ position: "absolute", top: 140, left: 140 }} className="dim">Clique em <b>Processo</b> para começar a desenhar o fluxo AS IS.</div>}
+          {!procs.length && <div style={{ position: "absolute", top: 140, left: 140 }} className="dim">Clique em <b>Processo</b> para começar a desenhar o fluxo AS IS.</div>}
         </div>
       </div>
+      </>)}
 
       {drawerNode && (<div className="drawer-overlay" onClick={() => setDrawerId(null)}>
         <div className="drawer" onClick={(e) => e.stopPropagation()}>
